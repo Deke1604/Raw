@@ -7,11 +7,15 @@
 const char* host = "esp32";
 const char* ssid = "Deke";
 const char* password = "tgyo3978";
+const char* FIRMWARE_VERSION = "1.0.0"; 
+
+const char* firmwareURL = "http://deke1604.github.io/Raw/firmware.bin";
+// const char* versionFileUrl = "http://deke1604.github.io/ESP32_OTA_Project/version.txt";
 
 //variables to blink without delay:
 const int led = 2;
 unsigned long previousMillis = 0;        // will store last time LED was updated
-const long interval = 1000;           // interval at which to blink (milliseconds)
+const long interval = 3000;           // interval at which to blink (milliseconds)
 int ledState = LOW;             // ledState used to set the LED
 
 
