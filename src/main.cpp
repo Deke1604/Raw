@@ -14,11 +14,13 @@ const char* FIRMWARE_VERSION = "1.0.0";
 const char* versionFileUrl   = "http://deke1604.github.io/Raw/version.txt";
 const char* firmwareURL      = "http://deke1604.github.io/Raw/firmware.bin";
 
+#define LED_BUILTIN 2
+
 // variables to blink without delay
-const int led = 2;
-unsigned long previousMillis = 0;
-const long interval = 1000;
-int ledState = LOW;
+// const int led = 2;
+// unsigned long previousMillis = 0;
+// const long interval = 1000;
+// int ledState = LOW;
 
 WebServer server(80);
 
@@ -113,7 +115,9 @@ void performOTA() {
 }
 
 void setup(void) {
-  pinMode(led, OUTPUT);
+  // pinMode(led, OUTPUT);
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW); 
   Serial.begin(115200);
 
   // Connect to WiFi
@@ -127,7 +131,7 @@ void setup(void) {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-  // 🔹 Check GitHub for new firmware
+  // Check GitHub for new firmware
   performOTA();
 
   // Setup mDNS
@@ -178,11 +182,14 @@ void setup(void) {
 void loop(void) {
   server.handleClient();
 
+  digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+  delay(1000);
+
   // Blink LED without delay
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= interval) {
-    previousMillis = currentMillis;
-    ledState = !ledState;
-    digitalWrite(led, ledState);
-  }
+  // unsigned long currentMillis = millis();
+  // if (currentMillis - previousMillis >= interval) {
+  //  previousMillis = currentMillis;
+  //  ledState = !ledState;
+  //  digitalWrite(led, ledState);
+  // }
 }
