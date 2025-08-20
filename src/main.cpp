@@ -1,4 +1,5 @@
 #include <WiFi.h>
+#include <HTTPClient.h>
 #include <WiFiClient.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
@@ -10,7 +11,7 @@ const char* password = "tgyo3978";
 const char* FIRMWARE_VERSION = "1.0.0"; 
 
 const char* firmwareURL = "http://deke1604.github.io/Raw/firmware.bin";
-// const char* versionFileUrl = "http://deke1604.github.io/ESP32_OTA_Project/version.txt";
+const char* versionFileUrl = "http://deke1604.github.io/Raw/version.txt";
 
 //variables to blink without delay:
 const int led = 2;
@@ -103,6 +104,8 @@ const char* serverIndex =
  "});"
  "</script>";
 
+HTTPClient http;
+
 void setup(void) {
 
   pinMode(led, OUTPUT);
@@ -122,6 +125,34 @@ void setup(void) {
   Serial.println(ssid);
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
+
+  // Get the latest version from the server
+  http.begin(versionFileUrl);
+  int httpCode = http.GET();
+  if (httpCode != HTTP_CODE_OK) {
+    Serial.println("Failed to get version file.");
+    http.end();
+    return;
+  }
+  
+  String serverVersion = http.getString();
+  serverVersion.trim();
+  http.end();
+  
+  Serial.print("Current firmware version: ");
+  Serial.println(FIRMWARE_VERSION);
+  Serial.print("Server firmware version: ");
+  Serial.println(serverVersion);
+  
+  if (strcmp(FIRMWARE_VERSION, serverVersion.c_str()) >= 0) {
+    Serial.println("No update available.");
+    return;
+  }
+
+  // If a newer version is available, proceed with the download
+  Serial.println("A newer version is available. Starting OTA update...");
+  http.begin(firmwareURL);
+  httpCode = http.GET();
 
   /*use mdns for host name resolution*/
   if (!MDNS.begin(host)) { //http://esp32.local
