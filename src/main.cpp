@@ -4,165 +4,140 @@
 #include <WebServer.h>
 #include <ESPmDNS.h>
 #include <Update.h>
+#include <Arduino.h>
 
 const char* host = "esp32";
 const char* ssid = "Deke";
 const char* password = "tgyo3978";
+
 const char* FIRMWARE_VERSION = "1.0.0"; 
+const char* versionFileUrl   = "http://deke1604.github.io/Raw/version.txt";
+const char* firmwareURL      = "http://deke1604.github.io/Raw/firmware.bin";
 
-const char* firmwareURL = "http://deke1604.github.io/Raw/firmware.bin";
-const char* versionFileUrl = "http://deke1604.github.io/Raw/version.txt";
-
-//variables to blink without delay:
+// variables to blink without delay
 const int led = 2;
-unsigned long previousMillis = 0;        // will store last time LED was updated
-const long interval = 1000;           // interval at which to blink (milliseconds)
-int ledState = LOW;             // ledState used to set the LED
-
+unsigned long previousMillis = 0;
+const long interval = 1000;
+int ledState = LOW;
 
 WebServer server(80);
 
 const char* loginIndex = 
  "<form name='loginForm'>"
     "<table width='20%' bgcolor='A09F9F' align='center'>"
-        "<tr>"
-            "<td colspan=2>"
-                "<center><font size=4><b>ESP32 Login Page</b></font></center>"
-                "<br>"
-            "</td>"
-            "<br>"
-            "<br>"
-        "</tr>"
-        "<td>Username:</td>"
-        "<td><input type='text' size=25 name='userid'><br></td>"
-        "</tr>"
-        "<br>"
-        "<br>"
-        "<tr>"
-            "<td>Password:</td>"
-            "<td><input type='Password' size=25 name='pwd'><br></td>"
-            "<br>"
-            "<br>"
-        "</tr>"
-        "<tr>"
-            "<td><input type='submit' onclick='check(this.form)' value='Login'></td>"
-        "</tr>"
+        "<tr><td colspan=2><center><font size=4><b>ESP32 Login Page</b></font></center><br></td></tr>"
+        "<tr><td>Username:</td><td><input type='text' size=25 name='userid'><br></td></tr>"
+        "<tr><td>Password:</td><td><input type='Password' size=25 name='pwd'><br></td></tr>"
+        "<tr><td><input type='submit' onclick='check(this.form)' value='Login'></td></tr>"
     "</table>"
 "</form>"
 "<script>"
-    "function check(form)"
-    "{"
-    "if(form.userid.value=='admin' && form.pwd.value=='admin')"
-    "{"
-    "window.open('/serverIndex')"
-    "}"
-    "else"
-    "{"
-    " alert('Error Password or Username')/*displays error message*/"
-    "}"
+    "function check(form){"
+    "if(form.userid.value=='admin' && form.pwd.value=='admin'){window.open('/serverIndex')}"
+    "else{ alert('Error Password or Username') }"
     "}"
 "</script>";
- 
-/*
- * Server Index Page
- */
- 
+
 const char* serverIndex = 
 "<script src='https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js'></script>"
 "<form method='POST' action='#' enctype='multipart/form-data' id='upload_form'>"
    "<input type='file' name='update'>"
-        "<input type='submit' value='Update'>"
-    "</form>"
- "<div id='prg'>progress: 0%</div>"
- "<script>"
+   "<input type='submit' value='Update'>"
+"</form>"
+"<div id='prg'>progress: 0%</div>"
+"<script>"
   "$('form').submit(function(e){"
   "e.preventDefault();"
   "var form = $('#upload_form')[0];"
   "var data = new FormData(form);"
-  " $.ajax({"
-  "url: '/update',"
-  "type: 'POST',"
-  "data: data,"
-  "contentType: false,"
-  "processData:false,"
-  "xhr: function() {"
-  "var xhr = new window.XMLHttpRequest();"
-  "xhr.upload.addEventListener('progress', function(evt) {"
-  "if (evt.lengthComputable) {"
-  "var per = evt.loaded / evt.total;"
-  "$('#prg').html('progress: ' + Math.round(per*100) + '%');"
-  "}"
-  "}, false);"
-  "return xhr;"
-  "},"
-  "success:function(d, s) {"
-  "console.log('success!')" 
- "},"
- "error: function (a, b, c) {"
- "}"
- "});"
- "});"
- "</script>";
+  " $.ajax({url: '/update', type: 'POST', data: data, contentType: false, processData:false,"
+  " xhr: function(){var xhr = new window.XMLHttpRequest();"
+  " xhr.upload.addEventListener('progress', function(evt){"
+  " if (evt.lengthComputable){var per = evt.loaded / evt.total;$('#prg').html('progress: ' + Math.round(per*100) + '%');}}, false);"
+  " return xhr;},"
+  " success:function(d,s){console.log('success!')},"
+  " error: function (a,b,c){}"
+  " });"
+  "});"
+"</script>";
 
 HTTPClient http;
 
-void setup(void) {
+// 🔹 Function to check GitHub and perform OTA if update exists
+void performOTA() {
+  Serial.println("Checking for firmware updates...");
 
+  http.begin(versionFileUrl);
+  int httpCode = http.GET();
+
+  if (httpCode == 200) {
+    String serverVersion = http.getString();
+    serverVersion.trim();
+    Serial.printf("Current: %s | Server: %s\n", FIRMWARE_VERSION, serverVersion.c_str());
+
+    if (serverVersion != FIRMWARE_VERSION) {
+      Serial.println("New firmware available! Starting OTA...");
+      http.end();
+
+      http.begin(firmwareURL);
+      int resp = http.GET();
+      if (resp == 200) {
+        int contentLength = http.getSize();
+        WiFiClient * stream = http.getStreamPtr();
+
+        if (Update.begin(contentLength)) {
+          size_t written = Update.writeStream(*stream);
+          if (written == contentLength) {
+            Serial.println("OTA written successfully. Rebooting...");
+            if (Update.end(true)) {
+              ESP.restart();
+            } else {
+              Serial.printf("Update.end() failed. Error: %s\n", Update.errorString());
+            }
+          } else {
+            Serial.printf("Written only %d/%d bytes. OTA failed!\n", written, contentLength);
+          }
+        } else {
+          Serial.println("Not enough space for OTA.");
+        }
+      } else {
+        Serial.printf("Failed to fetch firmware. HTTP code: %d\n", resp);
+      }
+    } else {
+      Serial.println("Already up-to-date.");
+    }
+  } else {
+    Serial.printf("Failed to fetch version file. HTTP code: %d\n", httpCode);
+  }
+  http.end();
+}
+
+void setup(void) {
   pinMode(led, OUTPUT);
   Serial.begin(115200);
 
-  // Connect to WiFi network
+  // Connect to WiFi
   WiFi.begin(ssid, password);
-  Serial.println("");
-
-  // Wait for connection
+  Serial.print("Connecting to WiFi");
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-  Serial.println("");
-  Serial.print("Connected to ");
-  Serial.println(ssid);
+  Serial.println("\nWiFi connected.");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-  // Get the latest version from the server
-  http.begin(versionFileUrl);
-  int httpCode = http.GET();
-  if (httpCode != HTTP_CODE_OK) {
-    Serial.println("Failed to get version file.");
-    http.end();
-    return;
-  }
-  
-  String serverVersion = http.getString();
-  serverVersion.trim();
-  http.end();
-  
-  Serial.print("Current firmware version: ");
-  Serial.println(FIRMWARE_VERSION);
-  Serial.print("Server firmware version: ");
-  Serial.println(serverVersion);
-  
-  if (strcmp(FIRMWARE_VERSION, serverVersion.c_str()) >= 0) {
-    Serial.println("No update available.");
-    return;
-  }
+  // 🔹 Check GitHub for new firmware
+  performOTA();
 
-  // If a newer version is available, proceed with the download
-  Serial.println("A newer version is available. Starting OTA update...");
-  http.begin(firmwareURL);
-  httpCode = http.GET();
-
-  /*use mdns for host name resolution*/
-  if (!MDNS.begin(host)) { //http://esp32.local
+  // Setup mDNS
+  if (!MDNS.begin(host)) {
     Serial.println("Error setting up MDNS responder!");
-    while (1) {
-      delay(1000);
-    }
+    while (1) { delay(1000); }
   }
   Serial.println("mDNS responder started");
-  /*return index page which is stored in serverIndex */
+
+  // Web Server routes
   server.on("/", HTTP_GET, []() {
     server.sendHeader("Connection", "close");
     server.send(200, "text/html", loginIndex);
@@ -171,7 +146,8 @@ void setup(void) {
     server.sendHeader("Connection", "close");
     server.send(200, "text/html", serverIndex);
   });
-  /*handling uploading firmware file */
+
+  // Handling uploading firmware file via Web OTA
   server.on("/update", HTTP_POST, []() {
     server.sendHeader("Connection", "close");
     server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
@@ -180,40 +156,33 @@ void setup(void) {
     HTTPUpload& upload = server.upload();
     if (upload.status == UPLOAD_FILE_START) {
       Serial.printf("Update: %s\n", upload.filename.c_str());
-      if (!Update.begin(UPDATE_SIZE_UNKNOWN)) { //start with max available size
+      if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
         Update.printError(Serial);
       }
     } else if (upload.status == UPLOAD_FILE_WRITE) {
-      /* flashing firmware to ESP*/
       if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
         Update.printError(Serial);
       }
     } else if (upload.status == UPLOAD_FILE_END) {
-      if (Update.end(true)) { //true to set the size to the current progress
-        Serial.printf("Update Success: %u\nRebooting...\n", upload.totalSize);
+      if (Update.end(true)) {
+        Serial.printf("Update Success: %u bytes\nRebooting...\n", upload.totalSize);
       } else {
         Update.printError(Serial);
       }
     }
   });
+
   server.begin();
 }
 
 void loop(void) {
   server.handleClient();
-  delay(1);
 
-  //loop to blink without delay
+  // Blink LED without delay
   unsigned long currentMillis = millis();
-
   if (currentMillis - previousMillis >= interval) {
-    // save the last time you blinked the LED
     previousMillis = currentMillis;
-
-    // if the LED is off turn it on and vice-versa:
-    ledState = not(ledState);
-
-    // set the LED with the ledState of the variable:
+    ledState = !ledState;
     digitalWrite(led, ledState);
   }
 }
