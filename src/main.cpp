@@ -16,7 +16,7 @@ const char* versionFileUrl = "http://deke1604.github.io/Raw/version.txt";
 //variables to blink without delay:
 const int led = 2;
 unsigned long previousMillis = 0;        // will store last time LED was updated
-const long interval = 3000;           // interval at which to blink (milliseconds)
+const long interval = 1000;           // interval at which to blink (milliseconds)
 int ledState = LOW;             // ledState used to set the LED
 
 
